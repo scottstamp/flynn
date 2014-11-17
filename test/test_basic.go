@@ -69,6 +69,9 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 
 	name := random.String(30)
 	t.Assert(s.Flynn("create", name), Outputs, fmt.Sprintf("Created %s\n", name))
+	t.Assert(s.Flynn("apps"), OutputContains, name)
+	// make sure flynn components are listed
+	t.Assert(s.Flynn("apps"), OutputContains, "router")
 
 	push := s.Git("push", "flynn", "master")
 	t.Assert(push, Succeeds)
@@ -83,6 +86,14 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 
 	defer s.Flynn("scale", "web=0")
 	t.Assert(s.Flynn("scale", "web=3"), Succeeds)
+
+	t.Assert(s.Flynn("env", "set", "ENV_TEST=var", "SECOND_VAL=2"), Succeeds)
+	t.Assert(s.Flynn("env"), OutputContains, "ENV_TEST=var\nSECOND_VAL=2")
+	t.Assert(s.Flynn("env", "get", "ENV_TEST"), Outputs, "var\n")
+	// test that containers do contain the ENV var
+	t.Assert(s.Flynn("run", "echo $ENV_TEST"), Outputs, "var\n")
+	t.Assert(s.Flynn("env", "unset", "ENV_TEST"), Succeeds)
+	t.Assert(s.Flynn("run", "echo $ENV_TEST"), Outputs, "\n")
 
 	route := random.String(32) + ".dev"
 	newRoute := s.Flynn("route", "add", "http", route)

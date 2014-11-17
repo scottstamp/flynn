@@ -46,12 +46,17 @@ func (s *appSuite) Git(args ...string) *CmdResult {
 
 type BasicSuite struct {
 	appSuite
+	client *controller.Client
 }
 
 var _ = c.Suite(&BasicSuite{})
 
 func (s *BasicSuite) SetUpSuite(t *c.C) {
 	s.initApp(t, "basic")
+	conf, err := config.ReadFile(flynnrc)
+	t.Assert(err, c.IsNil)
+	t.Assert(conf.Clusters, c.HasLen, 1)
+	s.client = newControllerClient(t, conf.Clusters[0])
 }
 
 var Attempts = attempt.Strategy{
@@ -87,6 +92,12 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 	defer s.Flynn("scale", "web=0")
 	t.Assert(s.Flynn("scale", "web=3"), Succeeds)
 
+	// keep track of job events
+	stream, err := s.client.StreamJobEvents(name, 0)
+	if err != nil {
+		t.Error(err)
+	}
+
 	t.Assert(s.Flynn("env", "set", "ENV_TEST=var", "SECOND_VAL=2"), Succeeds)
 	t.Assert(s.Flynn("env"), OutputContains, "ENV_TEST=var\nSECOND_VAL=2")
 	t.Assert(s.Flynn("env", "get", "ENV_TEST"), Outputs, "var\n")
@@ -101,30 +112,24 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 
 	t.Assert(s.Flynn("route"), OutputContains, strings.TrimSpace(newRoute.Output))
 
-	// use Attempts to give the processes time to start
-	if err := Attempts.Run(func() error {
-		ps := s.Flynn("ps")
-		if ps.Err != nil {
-			return ps.Err
-		}
-		psLines := strings.Split(strings.TrimSpace(ps.Output), "\n")
-		if len(psLines) != 4 {
-			return fmt.Errorf("Expected 4 ps lines, got %d", len(psLines))
-		}
+	waitForJobEvents(t, stream.Events, map[string]int{"web": 0})
 
-		for _, l := range psLines[1:] {
-			idType := regexp.MustCompile(`\s+`).Split(l, 2)
-			if idType[1] != "web" {
-				return fmt.Errorf("Expected web type, got %s", idType[1])
-			}
-			log := s.Flynn("log", idType[0])
-			if !strings.Contains(log.Output, "Listening on ") {
-				return fmt.Errorf("Expected \"%s\" to contain \"Listening on \"", log.Output)
-			}
+	ps := s.Flynn("ps")
+	t.Assert(ps, Succeeds)
+	psLines := strings.Split(strings.TrimSpace(ps.Output), "\n")
+	if len(psLines) != 4 {
+		t.Fatal(fmt.Errorf("Expected 4 ps lines, got %d", len(psLines)))
+	}
+
+	for _, l := range psLines[1:] {
+		idType := regexp.MustCompile(`\s+`).Split(l, 2)
+		if idType[1] != "web" {
+			t.Fatal(fmt.Errorf("Expected web type, got %s", idType[1]))
 		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
+		log := s.Flynn("log", idType[0])
+		if !strings.Contains(log.Output, "Listening on ") {
+			t.Fatal(fmt.Errorf("Expected \"%s\" to contain \"Listening on \"", log.Output))
+		}
 	}
 
 	// Make HTTP requests

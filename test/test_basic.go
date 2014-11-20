@@ -78,6 +78,12 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 	// make sure flynn components are listed
 	t.Assert(s.Flynn("apps"), OutputContains, "router")
 
+	// keep track of job events
+	stream, err := s.client.StreamJobEvents(name, 0)
+	if err != nil {
+		t.Error(err)
+	}
+
 	push := s.Git("push", "flynn", "master")
 	t.Assert(push, Succeeds)
 
@@ -91,12 +97,6 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 
 	defer s.Flynn("scale", "web=0")
 	t.Assert(s.Flynn("scale", "web=3"), Succeeds)
-
-	// keep track of job events
-	stream, err := s.client.StreamJobEvents(name, 0)
-	if err != nil {
-		t.Error(err)
-	}
 
 	t.Assert(s.Flynn("env", "set", "ENV_TEST=var", "SECOND_VAL=2"), Succeeds)
 	t.Assert(s.Flynn("env"), OutputContains, "ENV_TEST=var\nSECOND_VAL=2")
@@ -112,7 +112,7 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 
 	t.Assert(s.Flynn("route"), OutputContains, strings.TrimSpace(newRoute.Output))
 
-	waitForJobEvents(t, stream.Events, map[string]int{"web": 0})
+	waitForJobEventsActual(t, stream.Events, map[string]map[string]int{"web": {"up": 9, "down": 6}})
 
 	ps := s.Flynn("ps")
 	t.Assert(ps, Succeeds)

@@ -223,6 +223,37 @@ func processesEqual(expected, actual map[string]int) bool {
 	return true
 }
 
+func waitForJobEventsActual(t *c.C, events chan *ct.JobEvent, expected map[string]map[string]int) (lastID int64) {
+	debugf("waiting for job events: %v", expected)
+	actual := make(map[string]map[string]int)
+	for {
+	inner:
+		select {
+		case event := <-events:
+			if _, ok := actual[event.Type]; !ok {
+				actual[event.Type] = make(map[string]int)
+			}
+			debug("got job event:", event.Type, event.JobID, event.State)
+			lastID = event.ID
+			actual[event.Type][event.State] += 1
+
+			for t, e := range expected {
+				if _, ok := actual[t]; !ok {
+					break inner
+				}
+				for s, n := range e {
+					if actual[t][s] != n {
+						break inner
+					}
+				}
+			}
+			return
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for job events: ", expected)
+		}
+	}
+}
+
 func waitForJobEvents(t *c.C, events chan *ct.JobEvent, diff map[string]int) (lastID int64) {
 	debugf("waiting for job events: %v", diff)
 	actual := make(map[string]int)

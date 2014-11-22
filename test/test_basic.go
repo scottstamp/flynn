@@ -157,6 +157,28 @@ func (s *BasicSuite) TestBasic(t *c.C) {
 		t.Fatal(fmt.Errorf("Expected \"%s\" to not contain \"%s\"", routeOutput, routeID))
 	}
 
+	// flynn kill
+	stream, err = s.client.StreamJobEvents(name, 0)
+	if err != nil {
+		t.Error(err)
+	}
+	ps = s.Flynn("ps")
+	psLines = strings.Split(strings.TrimSpace(ps.Output), "\n")
+	job := psLines[1][:strings.Index(psLines[1], " ")]
+	t.Assert(s.Flynn("kill", job), Succeeds)
+	// detect the job being killed
+outer:
+	for {
+		select {
+		case e := <-stream.Events:
+			if strings.Contains(job, e.JobID) && e.State == "down" {
+				break outer
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for job kill event")
+		}
+	}
+
 	keys := s.Flynn("key")
 	t.Assert(keys, Succeeds)
 	k := keys.Output[:strings.Index(keys.Output, " ")]

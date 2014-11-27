@@ -191,6 +191,8 @@ func (s *CLISuite) TestResource(t *c.C) {
 	res, err := s.controllerClient(t).AppResourceList(app.name)
 	t.Assert(err, c.IsNil)
 	t.Assert(res, c.HasLen, 1)
+	// the env variable should be set
+	t.Assert(app.flynn("run", "-e", "bash", "--", "-c", "echo $FLYNN_POSTGRES"), c.Not(Outputs), "\n")
 }
 
 func (s *CLISuite) TestLog(t *c.C) {

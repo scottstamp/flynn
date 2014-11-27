@@ -19,16 +19,9 @@ import (
 
 type CLISuite struct {
 	Helper
-	ssh *sshData
 }
 
 var _ = c.ConcurrentSuite(&CLISuite{})
-
-func (s *CLISuite) SetUpSuite(t *c.C) {
-	var err error
-	s.ssh, err = genSSHKey()
-	t.Assert(err, c.IsNil)
-}
 
 func (s *CLISuite) TearDownSuite(t *c.C) {
 	s.cleanup()
@@ -60,7 +53,7 @@ func (a *cliTestApp) waitFor(events jobEvents) (int64, string) {
 }
 
 func (s *CLISuite) TestApp(t *c.C) {
-	app := newGitRepo(t, "", s.ssh)
+	app := s.newGitRepo(t, "")
 	name := random.String(30)
 	t.Assert(app.flynn("create", name), Outputs, fmt.Sprintf("Created %s\n", name))
 	t.Assert(app.flynn("apps"), OutputContains, name)
@@ -86,15 +79,15 @@ func formatKeyID(s string) string {
 }
 
 func (s *CLISuite) TestKey(t *c.C) {
-	app := newGitRepo(t, "env-dir", s.ssh)
+	app := s.newGitRepo(t, "env-dir")
 	// setup
 	t.Assert(app.flynn("create"), Succeeds)
 	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
-	t.Assert(app.flynn("key", "add", s.ssh.Pub), Succeeds)
+	t.Assert(app.flynn("key", "add", s.sshKeys(t).Pub), Succeeds)
 
 	// calculate fingerprint
-	data, err := ioutil.ReadFile(s.ssh.Pub)
+	data, err := ioutil.ReadFile(s.sshKeys(t).Pub)
 	t.Assert(err, c.IsNil)
 	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(data)
 	t.Assert(err, c.IsNil)
@@ -152,11 +145,11 @@ func (s *CLISuite) TestScale(t *c.C) {
 }
 
 func (s *CLISuite) TestRun(t *c.C) {
-	app := newGitRepo(t, "env-dir", s.ssh)
+	app := s.newGitRepo(t, "env-dir")
 	// setup
 	t.Assert(app.flynn("create"), Succeeds)
 	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
-	t.Assert(app.flynn("key", "add", s.ssh.Pub), Succeeds)
+	t.Assert(app.flynn("key", "add", s.sshKeys(t).Pub), Succeeds)
 	t.Assert(app.git("push", "flynn", "master"), Succeeds)
 
 	t.Assert(app.flynn("echo", "hello"), Outputs, "hello\n")

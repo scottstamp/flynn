@@ -2,6 +2,10 @@ package main
 
 import (
 	"encoding/base64"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	c "github.com/flynn/flynn/Godeps/_workspace/src/github.com/flynn/go-check"
 	"github.com/flynn/flynn/cli/config"
@@ -17,6 +21,7 @@ type Helper struct {
 	controller *controller.Client
 	disc       *discoverd.Client
 	hosts      map[string]cluster.Host
+	ssh        *sshData
 }
 
 func (h *Helper) clusterConf(t *c.C) *config.Cluster {
@@ -71,6 +76,15 @@ func (h *Helper) hostClient(t *c.C, hostID string) cluster.Host {
 	return client
 }
 
+func (h *Helper) sshKeys(t *c.C) *sshData {
+	if h.ssh == nil {
+		var err error
+		h.ssh, err = genSSHKey()
+		t.Assert(err, c.IsNil)
+	}
+	return h.ssh
+}
+
 func (h *Helper) newSlugrunnerArtifact(t *c.C) *ct.Artifact {
 	r, err := h.controllerClient(t).GetAppRelease("gitreceive")
 	t.Assert(err, c.IsNil)
@@ -118,6 +132,39 @@ func (h *Helper) createApp(t *c.C) (*ct.App, *ct.Release) {
 	return app, release
 }
 
+type gitRepo struct {
+	dir string
+	ssh *sshData
+	t   *c.C
+}
+
+func (h *Helper) newGitRepo(t *c.C, nameOrURL string) *gitRepo {
+	dir := filepath.Join(t.MkDir(), "repo")
+	r := &gitRepo{dir, h.sshKeys(t), t}
+
+	if strings.HasPrefix(nameOrURL, "https://") {
+		t.Assert(run(t, exec.Command("git", "clone", nameOrURL, dir)), Succeeds)
+		return r
+	}
+
+	t.Assert(run(t, exec.Command("cp", "-r", filepath.Join("apps", nameOrURL), dir)), Succeeds)
+	t.Assert(r.git("init"), Succeeds)
+	t.Assert(r.git("add", "."), Succeeds)
+	t.Assert(r.git("commit", "-am", "init"), Succeeds)
+	return r
+}
+
+func (r *gitRepo) flynn(args ...string) *CmdResult {
+	return flynn(r.t, r.dir, args...)
+}
+
+func (r *gitRepo) git(args ...string) *CmdResult {
+	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), r.ssh.Env...)
+	cmd.Dir = r.dir
+	return run(r.t, cmd)
+}
+
 func (h *Helper) cleanup() {
 	if h.disc != nil {
 		h.disc.Close()
@@ -128,7 +175,10 @@ func (h *Helper) cleanup() {
 	if h.controller != nil {
 		h.controller.Close()
 	}
-	for _, h := range h.hosts {
-		h.Close()
+	for _, host := range h.hosts {
+		host.Close()
+	}
+	if h.ssh != nil {
+		h.ssh.Cleanup()
 	}
 }

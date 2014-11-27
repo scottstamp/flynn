@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"github.com/flynn/flynn/Godeps/_workspace/src/golang.org/x/crypto/ssh"
 	"github.com/flynn/flynn/cli/config"
 	"github.com/flynn/flynn/controller/client"
+	ct "github.com/flynn/flynn/controller/types"
 	"github.com/flynn/flynn/pkg/random"
 )
 
@@ -248,4 +250,32 @@ func (s *CLISuite) TestCluster(t *c.C) {
 	cfg, err = config.ReadFile(file.Name())
 	t.Assert(err, c.IsNil)
 	t.Assert(cfg.Clusters, c.HasLen, 0)
+}
+
+func (s *CLISuite) TestRelease(t *c.C) {
+	release := []byte(`{
+		"env": {"MY_VAR": "Hello World, this will be available in all process types."},
+		"processes": {
+			"echo": {
+				"cmd": ["socat -v tcp-l:$PORT,fork exec:/bin/cat"],
+				"entrypoint": ["sh", "-c"],
+				"env": {"ECHO": "This var is specific to the echo process type."},
+				"ports": [{"proto": "tcp"}]
+			}
+		}
+	}`)
+	file, err := ioutil.TempFile("", "")
+	file.Write(release)
+	t.Assert(err, c.IsNil)
+
+	app := s.newCliTestApp(t)
+	t.Assert(app.flynn("release", "add", "-f", file.Name(), "https://registry.hub.docker.com/flynn/slugbuilder?id=15d72b7f573b"), Succeeds)
+
+	rel := &ct.Release{}
+	json.Unmarshal(release, &rel)
+	r, err := s.controller.GetAppRelease(app.name)
+	t.Assert(err, c.IsNil)
+
+	t.Assert(r.Env, c.DeepEquals, rel.Env)
+	t.Assert(r.Processes, c.DeepEquals, rel.Processes)
 }

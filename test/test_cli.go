@@ -52,6 +52,10 @@ func (a *cliTestApp) waitFor(events jobEvents) (int64, string) {
 	return waitForJobEvents(a.t, a.stream.Events, events)
 }
 
+func (a *cliTestApp) bash(cmd string) *CmdResult {
+	return a.flynn("run", "-e", "bash", "--", "-c", cmd)
+}
+
 func (s *CLISuite) TestApp(t *c.C) {
 	app := s.newGitRepo(t, "")
 	name := random.String(30)
@@ -170,9 +174,9 @@ func (s *CLISuite) TestEnv(t *c.C) {
 	t.Assert(app.flynn("env"), OutputContains, "ENV_TEST=var\nSECOND_VAL=2")
 	t.Assert(app.flynn("env", "get", "ENV_TEST"), Outputs, "var\n")
 	// test that containers do contain the ENV var
-	t.Assert(app.flynn("run", "-e", "bash", "--", "-c", "echo $ENV_TEST"), Outputs, "var\n")
+	t.Assert(app.bash("echo $ENV_TEST"), Outputs, "var\n")
 	t.Assert(app.flynn("env", "unset", "ENV_TEST"), Succeeds)
-	t.Assert(app.flynn("run", "-e", "bash", "--", "-c", "echo $ENV_TEST"), Outputs, "\n")
+	t.Assert(app.bash("echo $ENV_TEST"), Outputs, "\n")
 }
 
 func (s *CLISuite) TestKill(t *c.C) {
@@ -222,7 +226,7 @@ func (s *CLISuite) TestResource(t *c.C) {
 	t.Assert(err, c.IsNil)
 	t.Assert(res, c.HasLen, 1)
 	// the env variable should be set
-	t.Assert(app.flynn("run", "-e", "bash", "--", "-c", "echo $FLYNN_POSTGRES"), c.Not(Outputs), "\n")
+	t.Assert(app.bash("echo $FLYNN_POSTGRES"), c.Not(Outputs), "\n")
 }
 
 func (s *CLISuite) TestLog(t *c.C) {

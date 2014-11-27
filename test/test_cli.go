@@ -16,9 +16,16 @@ import (
 
 type CLISuite struct {
 	Helper
+	ssh *sshData
 }
 
 var _ = c.ConcurrentSuite(&CLISuite{})
+
+func (s *CLISuite) SetUpSuite(t *c.C) {
+	var err error
+	s.ssh, err = genSSHKey()
+	t.Assert(err, c.IsNil)
+}
 
 func (s *CLISuite) TearDownSuite(t *c.C) {
 	s.cleanup()
@@ -50,14 +57,17 @@ func (a *cliTestApp) waitFor(events jobEvents) (int64, string) {
 }
 
 func (s *CLISuite) TestApp(t *c.C) {
+	app := newGitRepo(t, "", s.ssh)
 	name := random.String(30)
-	t.Assert(s.flynn(t, "create", name), Outputs, fmt.Sprintf("Created %s\n", name))
-	t.Assert(s.flynn(t, "apps"), OutputContains, name)
+	t.Assert(app.flynn("create", name), Outputs, fmt.Sprintf("Created %s\n", name))
+	t.Assert(app.flynn("apps"), OutputContains, name)
+	// git repo should include a push remote labeled flynn
+	t.Assert(app.git("remote", "-v").Output, Matches, `(?m)^flynn\t.+ \(push\)$`)
 	// make sure flynn components are listed
-	t.Assert(s.flynn(t, "apps"), OutputContains, "router")
+	t.Assert(app.flynn("apps"), OutputContains, "router")
 	// flynn delete
-	t.Assert(s.flynn(t, "-a", name, "delete", "--yes"), Succeeds)
-	t.Assert(s.flynn(t, "apps"), c.Not(OutputContains), name)
+	t.Assert(app.flynn("delete", "--yes"), Succeeds)
+	t.Assert(app.git("remote", "-v").Output, c.Not(Matches), `(?m)^flynn\t.+ \(push\)$`)
 }
 
 // TODO: share with cli/key.go
@@ -73,12 +83,10 @@ func formatKeyID(s string) string {
 }
 
 func (s *CLISuite) TestKey(t *c.C) {
-	key, err := genSSHKey()
-	t.Assert(err, c.IsNil)
-	t.Assert(s.flynn(t, "key", "add", key.Pub), Succeeds)
+	t.Assert(s.flynn(t, "key", "add", s.ssh.Pub), Succeeds)
 
 	// calculate fingerprint
-	data, err := ioutil.ReadFile(key.Pub)
+	data, err := ioutil.ReadFile(s.ssh.Pub)
 	t.Assert(err, c.IsNil)
 	pubKey, _, _, _, err := ssh.ParseAuthorizedKey(data)
 	t.Assert(err, c.IsNil)

@@ -42,9 +42,9 @@ type gitRepo struct {
 	t   *c.C
 }
 
-func (s *GitDeploySuite) newGitRepo(t *c.C, nameOrURL string) *gitRepo {
+func newGitRepo(t *c.C, nameOrURL string, ssh *sshData) *gitRepo {
 	dir := filepath.Join(t.MkDir(), "repo")
-	r := &gitRepo{dir, s.ssh, t}
+	r := &gitRepo{dir, ssh, t}
 
 	if strings.HasPrefix(nameOrURL, "https://") {
 		t.Assert(run(t, exec.Command("git", "clone", nameOrURL, dir)), Succeeds)
@@ -75,7 +75,7 @@ var Attempts = attempt.Strategy{
 }
 
 func (s *GitDeploySuite) TestEnvDir(t *c.C) {
-	r := s.newGitRepo(t, "env-dir")
+	r := newGitRepo(t, "env-dir", s.ssh)
 	t.Assert(r.flynn("create"), Succeeds)
 	t.Assert(r.flynn("env", "set", "FOO=bar", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
@@ -125,7 +125,7 @@ func (s *GitDeploySuite) TestPythonBuildpack(t *c.C) {
 }
 
 func (s *GitDeploySuite) runBuildpackTest(t *c.C, name string, resources []string) {
-	r := s.newGitRepo(t, "https://github.com/flynn-examples/"+name)
+	r := newGitRepo(t, "https://github.com/flynn-examples/"+name, s.ssh)
 
 	t.Assert(r.flynn("create", name), Outputs, fmt.Sprintf("Created %s\n", name))
 

@@ -10,6 +10,7 @@ import (
 
 	c "github.com/flynn/flynn/Godeps/_workspace/src/github.com/flynn/go-check"
 	"github.com/flynn/flynn/Godeps/_workspace/src/golang.org/x/crypto/ssh"
+	"github.com/flynn/flynn/cli/config"
 	"github.com/flynn/flynn/controller/client"
 	"github.com/flynn/flynn/pkg/random"
 )
@@ -219,10 +220,18 @@ func (s *CLISuite) TestCluster(t *c.C) {
 	// cluster add
 	t.Assert(flynn("cluster", "add", "-g", "test.example.com:2222", "-p", "KGCENkp53YF5OvOKkZIry71+czFRkSw2ZdMszZ/0ljs=", "test", "https://controller.test.example.com", "e09dc5301d72be755a3d666f617c4600"), Succeeds)
 	t.Assert(flynn("cluster"), OutputContains, "test")
+	// make sure the cluster is present in the config
+	cfg, err := config.ReadFile(file.Name())
+	t.Assert(err, c.IsNil)
+	t.Assert(cfg.Clusters, c.HasLen, 1)
+	t.Assert(cfg.Clusters[0].Name, c.Equals, "test")
 	// overwriting should not work
 	t.Assert(flynn("cluster", "add", "test", "foo", "bar"), c.Not(Succeeds))
 	t.Assert(flynn("cluster"), OutputContains, "test")
 	// cluster remove
 	t.Assert(flynn("cluster", "remove", "test"), Succeeds)
 	t.Assert(flynn("cluster"), c.Not(OutputContains), "test")
+	cfg, err = config.ReadFile(file.Name())
+	t.Assert(err, c.IsNil)
+	t.Assert(cfg.Clusters, c.HasLen, 0)
 }

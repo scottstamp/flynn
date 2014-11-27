@@ -151,6 +151,20 @@ func (s *CLISuite) TestScale(t *c.C) {
 	app.waitFor(jobEvents{"echoer": {"down": 3}})
 }
 
+func (s *CLISuite) TestRun(t *c.C) {
+	app := newGitRepo(t, "env-dir", s.ssh)
+	// setup
+	t.Assert(app.flynn("create"), Succeeds)
+	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
+	t.Assert(app.flynn("key", "add", s.ssh.Pub), Succeeds)
+	t.Assert(app.git("push", "flynn", "master"), Succeeds)
+
+	t.Assert(app.flynn("echo", "hello"), Outputs, "hello\n")
+	detached := app.flynn("echo", "hello")
+	t.Assert(detached, Succeeds)
+	t.Assert(detached, c.Not(Outputs), "hello\n")
+}
+
 func (s *CLISuite) TestEnv(t *c.C) {
 	app := s.newCliTestApp(t)
 	t.Assert(app.flynn("env", "set", "ENV_TEST=var", "SECOND_VAL=2"), Succeeds)

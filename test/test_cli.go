@@ -55,15 +55,18 @@ func (a *cliTestApp) waitFor(events jobEvents) (int64, string) {
 func (s *CLISuite) TestApp(t *c.C) {
 	app := s.newGitRepo(t, "")
 	name := random.String(30)
+	flynnRemote := fmt.Sprintf("flynn\tssh://git@%s/%s.git (push)", s.clusterConf(t).GitHost, name)
+
 	t.Assert(app.flynn("create", name), Outputs, fmt.Sprintf("Created %s\n", name))
 	t.Assert(app.flynn("apps"), OutputContains, name)
-	// git repo should include a push remote labeled flynn
-	t.Assert(app.git("remote", "-v").Output, Matches, `(?m)^flynn\t.+ \(push\)$`)
+	t.Assert(app.git("remote", "-v"), OutputContains, flynnRemote)
+
 	// make sure flynn components are listed
 	t.Assert(app.flynn("apps"), OutputContains, "router")
+
 	// flynn delete
 	t.Assert(app.flynn("delete", "--yes"), Succeeds)
-	t.Assert(app.git("remote", "-v").Output, c.Not(Matches), `(?m)^flynn\t.+ \(push\)$`)
+	t.Assert(app.git("remote", "-v"), c.Not(OutputContains), flynnRemote)
 }
 
 // TODO: share with cli/key.go

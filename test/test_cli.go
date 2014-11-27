@@ -84,7 +84,12 @@ func formatKeyID(s string) string {
 }
 
 func (s *CLISuite) TestKey(t *c.C) {
-	t.Assert(s.flynn(t, "key", "add", s.ssh.Pub), Succeeds)
+	app := newGitRepo(t, "env-dir", s.ssh)
+	// setup
+	t.Assert(app.flynn("create"), Succeeds)
+	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
+
+	t.Assert(app.flynn("key", "add", s.ssh.Pub), Succeeds)
 
 	// calculate fingerprint
 	data, err := ioutil.ReadFile(s.ssh.Pub)
@@ -94,9 +99,18 @@ func (s *CLISuite) TestKey(t *c.C) {
 	digest := md5.Sum(pubKey.Marshal())
 	fingerprint := formatKeyID(hex.EncodeToString(digest[:]))
 
-	t.Assert(s.flynn(t, "key"), OutputContains, fingerprint)
-	t.Assert(s.flynn(t, "key", "remove", fingerprint), Succeeds)
-	t.Assert(s.flynn(t, "key"), c.Not(OutputContains), fingerprint)
+	t.Assert(app.flynn("key"), OutputContains, fingerprint)
+
+	t.Assert(app.git("commit", "--allow-empty", "-m", "should succeed"), Succeeds)
+	t.Assert(app.git("push", "flynn", "master"), Succeeds)
+
+	t.Assert(app.flynn("key", "remove", fingerprint), Succeeds)
+	t.Assert(app.flynn("key"), c.Not(OutputContains), fingerprint)
+
+	t.Assert(app.git("commit", "--allow-empty", "-m", "should fail"), Succeeds)
+	t.Assert(app.git("push", "flynn", "master"), c.Not(Succeeds))
+
+	t.Assert(app.flynn("delete", "--yes"), Succeeds)
 }
 
 func (s *CLISuite) TestPs(t *c.C) {

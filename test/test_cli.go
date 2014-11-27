@@ -148,17 +148,20 @@ func (s *CLISuite) TestScale(t *c.C) {
 }
 
 func (s *CLISuite) TestRun(t *c.C) {
-	app := s.newGitRepo(t, "env-dir")
-	// setup
-	t.Assert(app.flynn("create"), Succeeds)
-	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
-	t.Assert(app.flynn("key", "add", s.sshKeys(t).Pub), Succeeds)
-	t.Assert(app.git("push", "flynn", "master"), Succeeds)
+	app := s.newCliTestApp(t)
 
-	t.Assert(app.flynn("echo", "hello"), Outputs, "hello\n")
-	detached := app.flynn("echo", "hello")
+	t.Assert(app.flynn("run", "-e", "echo", "hello"), Outputs, "hello\n")
+	// drain the events
+	app.waitFor(jobEvents{"": {"up": 1, "down": 1}})
+
+	detached := app.flynn("run", "-d", "-e", "echo", "hello")
 	t.Assert(detached, Succeeds)
 	t.Assert(detached, c.Not(Outputs), "hello\n")
+
+	id := strings.TrimSpace(detached.Output)
+	_, jobID := app.waitFor(jobEvents{"": {"up": 1, "down": 1}})
+	t.Assert(jobID, c.Equals, id)
+	t.Assert(app.flynn("log", id), Outputs, "hello\n")
 }
 
 func (s *CLISuite) TestEnv(t *c.C) {

@@ -225,8 +225,11 @@ func (s *CLISuite) TestResource(t *c.C) {
 	res, err := s.controllerClient(t).AppResourceList(app.name)
 	t.Assert(err, c.IsNil)
 	t.Assert(res, c.HasLen, 1)
-	// the env variable should be set
-	t.Assert(app.bash("echo $FLYNN_POSTGRES"), c.Not(Outputs), "\n")
+	// the env variables should be set
+	t.Assert(app.bash("test -n $FLYNN_POSTGRES"), Succeeds)
+	t.Assert(app.bash("test -n $PGUSER"), Succeeds)
+	t.Assert(app.bash("test -n $PGPASSWORD"), Succeeds)
+	t.Assert(app.bash("test -n $PGDATABASE"), Succeeds)
 }
 
 func (s *CLISuite) TestLog(t *c.C) {

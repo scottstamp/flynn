@@ -126,7 +126,6 @@ func (s *CLISuite) TestPs(t *c.C) {
 	// empty formation == empty ps
 	t.Assert(ps(), c.HasLen, 0)
 	t.Assert(app.flynn("scale", "echoer=3"), Succeeds)
-	app.waitFor(jobEvents{"echoer": {"up": 3}})
 	jobs := ps()
 	// should return 3 jobs
 	t.Assert(jobs, c.HasLen, 3)
@@ -135,20 +134,16 @@ func (s *CLISuite) TestPs(t *c.C) {
 		t.Assert(j, Matches, "echoer")
 	}
 	t.Assert(app.flynn("scale", "echoer=0"), Succeeds)
-	app.waitFor(jobEvents{"echoer": {"down": 3}})
 	t.Assert(ps(), c.HasLen, 0)
 }
 
 func (s *CLISuite) TestScale(t *c.C) {
 	app := s.newCliTestApp(t)
 	t.Assert(app.flynn("scale", "echoer=1"), Succeeds)
-	app.waitFor(jobEvents{"echoer": {"up": 1}})
 	// should only start the missing two jobs
 	t.Assert(app.flynn("scale", "echoer=3"), Succeeds)
-	app.waitFor(jobEvents{"echoer": {"up": 2}})
 	// should stop all jobs
 	t.Assert(app.flynn("scale", "echoer=0"), Succeeds)
-	app.waitFor(jobEvents{"echoer": {"down": 3}})
 }
 
 func (s *CLISuite) TestRun(t *c.C) {
@@ -181,7 +176,7 @@ func (s *CLISuite) TestEnv(t *c.C) {
 
 func (s *CLISuite) TestKill(t *c.C) {
 	app := s.newCliTestApp(t)
-	t.Assert(app.flynn("scale", "echoer=1"), Succeeds)
+	t.Assert(app.flynn("scale", "--no-wait", "echoer=1"), Succeeds)
 	_, jobID := app.waitFor(jobEvents{"echoer": {"up": 1}})
 
 	t.Assert(app.flynn("kill", jobID), Succeeds)
@@ -234,13 +229,12 @@ func (s *CLISuite) TestResource(t *c.C) {
 
 func (s *CLISuite) TestLog(t *c.C) {
 	app := s.newCliTestApp(t)
-	t.Assert(app.flynn("scale", "printer=1"), Succeeds)
+	t.Assert(app.flynn("scale", "--no-wait", "printer=1"), Succeeds)
 	_, jobID := app.waitFor(jobEvents{"printer": {"up": 1}})
 
 	t.Assert(app.flynn("log", jobID), OutputContains, "I like to print")
 
 	t.Assert(app.flynn("scale", "printer=0"), Succeeds)
-	app.waitFor(jobEvents{"printer": {"down": 1}})
 }
 
 func (s *CLISuite) TestCluster(t *c.C) {

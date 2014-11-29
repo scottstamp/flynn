@@ -43,8 +43,7 @@
     "action": "gen-random"
   },
   {
-    "id": "dashboard-login-token",
-    "action": "gen-random"
+    "dashboard-login-token": "passw0rd"
   },
   {
     "id": "name-seed",
@@ -112,6 +111,15 @@
       "protected": true
     }
   },
+  {
+    "id": "mongodb-app",
+    "action": "add-app",
+    "from_step": "mongodb",
+    "app": {
+      "name": "mongodb",
+      "protected": true
+    }
+  }
   {
     "id": "scheduler-scale",
     "action": "scale-app",
@@ -288,6 +296,7 @@
         "CLUSTER_DOMAIN": "controller.{{ getenv \"CLUSTER_DOMAIN\" }}",
         "CONTROLLER_KEY": "{{ (index .StepData \"controller-key\").Data }}",
         "URL": "https://dashboard.{{ getenv \"CLUSTER_DOMAIN\" }}",
+        "GITHUB_TOKEN": "151931ecaf98442d2c3e8aeeda6e0d1ccf7b4ccf",
         "SESSION_SECRET": "{{ (index .StepData \"dashboard-session-secret\").Data }}",
         "LOGIN_TOKEN": "{{ (index .StepData \"dashboard-login-token\").Data }}",
         "STATIC_PATH": "/app",

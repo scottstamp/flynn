@@ -52,8 +52,8 @@ func (a *cliTestApp) waitFor(events jobEvents) (int64, string) {
 	return waitForJobEvents(a.t, a.stream.Events, events)
 }
 
-func (a *cliTestApp) bash(cmd string) *CmdResult {
-	return a.flynn("run", "-e", "bash", "--", "-c", cmd)
+func (a *cliTestApp) sh(cmd string) *CmdResult {
+	return a.flynn("run", "sh", "-c", cmd)
 }
 
 func (s *CLISuite) TestApp(t *c.C) {
@@ -169,9 +169,9 @@ func (s *CLISuite) TestEnv(t *c.C) {
 	t.Assert(app.flynn("env"), OutputContains, "ENV_TEST=var\nSECOND_VAL=2")
 	t.Assert(app.flynn("env", "get", "ENV_TEST"), Outputs, "var\n")
 	// test that containers do contain the ENV var
-	t.Assert(app.bash("echo $ENV_TEST"), Outputs, "var\n")
+	t.Assert(app.sh("echo $ENV_TEST"), Outputs, "var\n")
 	t.Assert(app.flynn("env", "unset", "ENV_TEST"), Succeeds)
-	t.Assert(app.bash("echo $ENV_TEST"), Outputs, "\n")
+	t.Assert(app.sh("echo $ENV_TEST"), Outputs, "\n")
 }
 
 func (s *CLISuite) TestKill(t *c.C) {
@@ -221,10 +221,10 @@ func (s *CLISuite) TestResource(t *c.C) {
 	t.Assert(err, c.IsNil)
 	t.Assert(res, c.HasLen, 1)
 	// the env variables should be set
-	t.Assert(app.bash("test -n $FLYNN_POSTGRES"), Succeeds)
-	t.Assert(app.bash("test -n $PGUSER"), Succeeds)
-	t.Assert(app.bash("test -n $PGPASSWORD"), Succeeds)
-	t.Assert(app.bash("test -n $PGDATABASE"), Succeeds)
+	t.Assert(app.sh("test -n $FLYNN_POSTGRES"), Succeeds)
+	t.Assert(app.sh("test -n $PGUSER"), Succeeds)
+	t.Assert(app.sh("test -n $PGPASSWORD"), Succeeds)
+	t.Assert(app.sh("test -n $PGDATABASE"), Succeeds)
 }
 
 func (s *CLISuite) TestLog(t *c.C) {
@@ -267,29 +267,40 @@ func (s *CLISuite) TestCluster(t *c.C) {
 }
 
 func (s *CLISuite) TestRelease(t *c.C) {
-	release := []byte(`{
-		"env": {"MY_VAR": "Hello World, this will be available in all process types."},
+	releaseJSON := []byte(`{
+		"env": {"GLOBAL": "FOO"},
 		"processes": {
-			"echo": {
-				"cmd": ["socat -v tcp-l:$PORT,fork exec:/bin/cat"],
-				"entrypoint": ["sh", "-c"],
-				"env": {"ECHO": "This var is specific to the echo process type."},
-				"ports": [{"proto": "tcp"}]
+			"echoer": {
+				"cmd": ["/bin/echoer"],
+				"env": {"ECHOER_ONLY": "BAR"}
+			},
+			"env": {
+				"cmd": ["sh", "-c", "env; while true; do sleep 60; done"],
+				"env": {"ENV_ONLY": "BAZ"}
 			}
 		}
 	}`)
+	release := &ct.Release{}
+	t.Assert(json.Unmarshal(releaseJSON, &release), c.IsNil)
+
 	file, err := ioutil.TempFile("", "")
-	file.Write(release)
 	t.Assert(err, c.IsNil)
+	file.Write(releaseJSON)
+	file.Close()
 
 	app := s.newCliTestApp(t)
-	t.Assert(app.flynn("release", "add", "-f", file.Name(), "https://registry.hub.docker.com/flynn/slugbuilder?id=15d72b7f573b"), Succeeds)
+	t.Assert(app.flynn("release", "add", "-f", file.Name(), testImageURI), Succeeds)
 
-	rel := &ct.Release{}
-	json.Unmarshal(release, &rel)
 	r, err := s.controller.GetAppRelease(app.name)
 	t.Assert(err, c.IsNil)
+	t.Assert(r.Env, c.DeepEquals, release.Env)
+	t.Assert(r.Processes, c.DeepEquals, release.Processes)
 
-	t.Assert(r.Env, c.DeepEquals, rel.Env)
-	t.Assert(r.Processes, c.DeepEquals, rel.Processes)
+	t.Assert(app.flynn("scale", "--no-wait", "env=1"), Succeeds)
+	_, jobID := app.waitFor(jobEvents{"env": {"up": 1}})
+	envLog := app.flynn("log", jobID)
+	t.Assert(envLog, Succeeds)
+	t.Assert(envLog, OutputContains, "GLOBAL=FOO")
+	t.Assert(envLog, OutputContains, "ENV_ONLY=BAZ")
+	t.Assert(envLog, c.Not(OutputContains), "ECHOER_ONLY=BAR")
 }

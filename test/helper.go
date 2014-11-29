@@ -85,14 +85,6 @@ func (h *Helper) sshKeys(t *c.C) *sshData {
 	return h.ssh
 }
 
-func (h *Helper) newSlugrunnerArtifact(t *c.C) *ct.Artifact {
-	r, err := h.controllerClient(t).GetAppRelease("gitreceive")
-	t.Assert(err, c.IsNil)
-	slugrunnerURI := r.Processes["app"].Env["SLUGRUNNER_IMAGE_URI"]
-	t.Assert(slugrunnerURI, c.Not(c.Equals), "")
-	return &ct.Artifact{Type: "docker", URI: slugrunnerURI}
-}
-
 func (h *Helper) createApp(t *c.C) (*ct.App, *ct.Release) {
 	client := h.controllerClient(t)
 
@@ -100,30 +92,25 @@ func (h *Helper) createApp(t *c.C) (*ct.App, *ct.Release) {
 	t.Assert(client.CreateApp(app), c.IsNil)
 	debugf(t, "created app %s (%s)", app.Name, app.ID)
 
-	artifact := h.newSlugrunnerArtifact(t)
+	artifact := &ct.Artifact{Type: "docker", URI: testImageURI}
 	t.Assert(client.CreateArtifact(artifact), c.IsNil)
 
 	release := &ct.Release{
 		ArtifactID: artifact.ID,
 		Processes: map[string]ct.ProcessType{
 			"echoer": {
-				Entrypoint: []string{"bash", "-c"},
-				Cmd:        []string{"sdutil exec -s echo-service:$PORT socat -v tcp-l:$PORT,fork exec:/bin/cat"},
-				Ports:      []ct.Port{{Proto: "tcp"}},
+				Cmd:   []string{"/bin/echoer"},
+				Ports: []ct.Port{{Proto: "tcp"}},
 			},
 			"printer": {
-				Entrypoint: []string{"bash", "-c"},
-				Cmd:        []string{"while true; do echo I like to print; sleep 1; done"},
-				Ports:      []ct.Port{{Proto: "tcp"}},
+				Cmd: []string{"sh", "-c", "while true; do echo I like to print; sleep 1; done"},
 			},
 			"crasher": {
-				Entrypoint: []string{"bash", "-c"},
-				Cmd:        []string{"trap 'exit 1' SIGTERM; while true; do echo I like to crash; sleep 1; done"},
+				Cmd: []string{"sh", "-c", "trap 'exit 1' SIGTERM; while true; do echo I like to crash; sleep 1; done"},
 			},
 			"omni": {
-				Entrypoint: []string{"bash", "-c"},
-				Cmd:        []string{"while true; do echo I am everywhere; sleep 1; done"},
-				Omni:       true,
+				Cmd:  []string{"sh", "-c", "while true; do echo I am everywhere; sleep 1; done"},
+				Omni: true,
 			},
 		},
 	}

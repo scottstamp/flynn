@@ -40,7 +40,7 @@ var testCluster *cluster.Cluster
 var httpClient *http.Client
 var testImageURI string
 
-const testImageName = "flynn/test"
+const testImageName = "flynn/echoer"
 
 func init() {
 	args = arg.Parse()

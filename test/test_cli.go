@@ -138,10 +138,13 @@ func (s *CLISuite) TestPs(t *c.C) {
 func (s *CLISuite) TestScale(t *c.C) {
 	app := s.newCliTestApp(t)
 	t.Assert(app.flynn("scale", "echoer=1"), Succeeds)
+	app.waitFor(jobEvents{"echoer": {"up": 1}})
 	// should only start the missing two jobs
 	t.Assert(app.flynn("scale", "echoer=3"), Succeeds)
+	app.waitFor(jobEvents{"echoer": {"up": 2}})
 	// should stop all jobs
 	t.Assert(app.flynn("scale", "echoer=0"), Succeeds)
+	app.waitFor(jobEvents{"echoer": {"down": 3}})
 }
 
 func (s *CLISuite) TestRun(t *c.C) {

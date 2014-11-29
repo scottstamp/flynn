@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -164,6 +166,33 @@ func (s *CLISuite) TestRun(t *c.C) {
 	t.Assert(jobID, c.Equals, id)
 	t.Assert(app.flynn("log", id), Outputs, "hello\n")
 
+	// barebones wrapper
+	f := func(cmdArgs ...string) *exec.Cmd {
+		cmd := exec.Command(args.CLI, append([]string{"-a", app.name}, cmdArgs...)...)
+		cmd.Env = append(os.Environ(), "FLYNNRC="+flynnrc)
+		cmd.Dir = "/"
+		return cmd
+	}
+	sh := func(cmd string) *exec.Cmd {
+		return f("run", "sh", "-c", cmd)
+	}
+
+	// test stdin and stderr
+	streams := sh("cat 1>&2")
+	stdin, err := streams.StdinPipe()
+	t.Assert(err, c.IsNil)
+	go func() {
+		stdin.Write([]byte("goto stderr"))
+		stdin.Close()
+	}()
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	streams.Stderr = &stderr
+	streams.Stdout = &stdout
+	t.Assert(streams.Run(), c.IsNil)
+	t.Assert(stderr.String(), c.Equals, "goto stderr")
+	t.Assert(stdout.String(), c.Equals, "")
+
 	// test exit code
 	exit := app.sh("exit 42")
 	t.Assert(exit, c.Not(Succeeds))
@@ -173,6 +202,14 @@ func (s *CLISuite) TestRun(t *c.C) {
 	} else {
 		t.Fatal("There was no error code!")
 	}
+
+	// test signal forwarding
+	trap := sh("trap 'echo true' SIGUSR1 && tail -f /dev/null")
+	var out bytes.Buffer
+	trap.Stdout = &out
+	go trap.Run()
+	trap.Process.Signal(syscall.SIGUSR1)
+	t.Assert(out.String(), c.Equals, "true")
 }
 
 func (s *CLISuite) TestEnv(t *c.C) {

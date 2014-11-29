@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os/exec"
 	"strings"
+	"syscall"
 
 	c "github.com/flynn/flynn/Godeps/_workspace/src/github.com/flynn/go-check"
 	"github.com/flynn/flynn/Godeps/_workspace/src/golang.org/x/crypto/ssh"
@@ -162,6 +163,16 @@ func (s *CLISuite) TestRun(t *c.C) {
 	_, jobID := app.waitFor(jobEvents{"": {"up": 1, "down": 1}})
 	t.Assert(jobID, c.Equals, id)
 	t.Assert(app.flynn("log", id), Outputs, "hello\n")
+
+	// test exit code
+	exit := app.sh("exit 42")
+	t.Assert(exit, c.Not(Succeeds))
+	if msg, ok := exit.Err.(*exec.ExitError); ok { // there is error code
+		code := msg.Sys().(syscall.WaitStatus).ExitStatus()
+		t.Assert(code, c.Equals, 42)
+	} else {
+		t.Fatal("There was no error code!")
+	}
 }
 
 func (s *CLISuite) TestEnv(t *c.C) {

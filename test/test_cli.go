@@ -86,10 +86,8 @@ func formatKeyID(s string) string {
 }
 
 func (s *CLISuite) TestKey(t *c.C) {
-	app := s.newGitRepo(t, "env-dir")
-	// setup
+	app := s.newGitRepo(t, "empty")
 	t.Assert(app.flynn("create"), Succeeds)
-	t.Assert(app.flynn("env", "set", "BUILDPACK_URL=https://github.com/kr/heroku-buildpack-inline"), Succeeds)
 
 	t.Assert(app.flynn("key", "add", s.sshKeys(t).Pub), Succeeds)
 
